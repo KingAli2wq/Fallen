@@ -1,0 +1,4 @@
+write(conv_bool("true"))
+write(conv_bool("no"))
+write(conv_bool("ON"))
+write(conv_bool("0"))

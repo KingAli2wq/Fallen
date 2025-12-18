@@ -1,0 +1,8 @@
+value =s enter ("what is the name of your school? ")
+if value == "mmgc" {
+    write("Falcon")
+else {
+    write("your gay")
+}
+}
+

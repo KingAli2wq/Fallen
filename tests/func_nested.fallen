@@ -1,0 +1,6 @@
+func sign(n =i) {
+  if n > 0 { return 1 }
+  else { return 0 }
+}
+write(sign(2))
+write(sign(-1))

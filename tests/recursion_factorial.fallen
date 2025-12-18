@@ -1,0 +1,6 @@
+func fact(n =i) {
+  if n == 0 { return 1 }
+  else { return n * fact(n - 1) }
+}
+
+write(fact(5))

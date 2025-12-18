@@ -1,0 +1,4 @@
+x =b true
+
+# RHS would crash if evaluated (y is undefined)
+if x or y == 1 { write("SAFE") } else { write("BAD") }

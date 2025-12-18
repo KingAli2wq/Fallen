@@ -1,0 +1,2 @@
+age =i conv_int(enter("Age: "))
+write(age)

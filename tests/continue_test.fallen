@@ -1,0 +1,9 @@
+x =i 0
+
+while x < 5 {
+  x =i x + 1
+  if x == 3 {
+    continue
+  }
+  write(x)
+}

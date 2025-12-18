@@ -1,0 +1,2 @@
+# Intentionally trigger a runtime error with a readable message
+nope(1)

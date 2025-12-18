@@ -1,0 +1,6 @@
+run =i 45
+
+while run < 47 {
+    write("The Test Works")
+    run =i run + 1
+}

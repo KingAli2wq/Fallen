@@ -1,0 +1,2 @@
+x =f try_conv_float("2.5")
+write(x)

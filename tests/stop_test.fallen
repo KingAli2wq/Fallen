@@ -1,0 +1,9 @@
+x =i 0
+
+while x < 10 {
+  if x == 4 {
+    stop
+  }
+  write(x)
+  x =i x + 1
+}
