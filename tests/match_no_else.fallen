@@ -1,0 +1,6 @@
+x =i 9
+match x {
+  1 { write("one") }
+  2 { write("two") }
+}
+write("done")

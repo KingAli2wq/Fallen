@@ -1,0 +1,11 @@
+ex =i 2
+
+if x == 1 {
+  write("one")
+}
+elif x == 2 {
+  write("two")
+}
+else {
+  write("other")
+}

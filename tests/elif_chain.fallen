@@ -1,0 +1,14 @@
+x =i 3
+
+if x == 1 {
+  write("one")
+}
+elif x == 2 {
+  write("two")
+}
+elif x == 3 {
+  write("three")
+}
+else {
+  write("other")
+}

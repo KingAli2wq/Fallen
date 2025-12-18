@@ -1,0 +1,13 @@
+x =i 2
+
+match x {
+  1 {
+    write("one")
+  }
+  2 {
+    write("two")
+  }
+  else {
+    write("other")
+  }
+}

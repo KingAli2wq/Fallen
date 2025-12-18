@@ -1,0 +1,6 @@
+p =d { "hp": 100, "name": "Ali" }
+write(call p("hp"))
+set p ("hp") to (120)
+write(call p("hp"))
+remove p("name")
+write(call p)

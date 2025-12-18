@@ -1,0 +1,8 @@
+x =i 5
+
+if x == 1 {
+  write("one")
+}
+elif x == 2 {
+  write("two")
+}
