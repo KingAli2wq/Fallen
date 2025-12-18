@@ -1,5 +1,7 @@
 from ast_nodes import (
-    Program, VarAssign, Literal, Var, Binary, Unary, Call, Block, If, While, Stop, Continue, FuncDef, Return
+    Program, VarAssign, Literal, Var, Binary, Unary, Call, Block, If, While, Stop, Continue, FuncDef, Return,
+    ListLiteral, ListAccess, SetListItem, AddListItem, RemoveListItem, For,
+    Match, DictLiteral, IndexAccess
 )
 
 class Parser:
@@ -14,7 +16,19 @@ class Parser:
         if self.current_token.type == token_type:
             self.current_token = self.lexer.get_next_token()
         else:
-            raise Exception(f"Expected {token_type}, got {self.current_token.type}")
+            tok = self.current_token
+            raise Exception(f"Expected {token_type}, got {tok.type} at line {tok.line}, col {tok.column}")
+
+    def error_here(self, message):
+        tok = self.current_token
+        raise Exception(f"{message} at line {tok.line}, col {tok.column}")
+
+    def eat_ident_value(self, expected_value):
+        if self.current_token.type != "IDENT" or self.current_token.value != expected_value:
+            tok = self.current_token
+            got = tok.value if tok.type == "IDENT" else tok.type
+            raise Exception(f"Expected '{expected_value}', got {got} at line {tok.line}, col {tok.column}")
+        self.eat("IDENT")
 
     # ignore extra NEWLINEs so formatting can be flexible
     def skip_newlines(self):
@@ -50,8 +64,31 @@ class Parser:
         # if statement
         if self.current_token.type == "IF":
             return self.if_statement()
+        if self.current_token.type == "ELIF":
+            self.error_here("elif used without a preceding if")
+        if self.current_token.type == "MATCH":
+            return self.match_statement()
         if self.current_token.type == "WHILE":
             return self.while_statement()
+
+        if self.current_token.type == "FOR":
+            return self.for_statement()
+
+        # soft-keyword list operations at statement-start
+        if self.current_token.type == "IDENT" and self.current_token.value == "set":
+            return self.set_statement()
+
+        if self.current_token.type == "IDENT" and self.current_token.value == "add":
+            return self.add_statement()
+
+        if self.current_token.type == "IDENT" and self.current_token.value == "remove":
+            return self.remove_statement()
+
+        if self.current_token.type == "IDENT" and self.current_token.value == "call":
+            # statement sugar: call <list>(<index>) prints the value
+            self.eat_ident_value("call")
+            expr = self.call_index_expr_from_ident()
+            return Call("write", [expr])
 
 
         # WRITE keyword call
@@ -72,6 +109,103 @@ class Parser:
             return Continue()
 
         raise Exception(f"Unexpected token in statement: {self.current_token.type}")
+
+    def for_statement(self):
+        self.eat("FOR")
+
+        if self.current_token.type != "IDENT":
+            self.error_here("Expected loop variable name after for")
+        var_name = self.current_token.value
+        self.eat("IDENT")
+
+        self.eat("IN")
+        iterable_expr = self.expr()
+        body = self.block()
+        return For(var_name, iterable_expr, body)
+
+    def set_statement(self):
+        self.eat_ident_value("set")
+        if self.current_token.type != "IDENT":
+            self.error_here("Expected list name after set")
+        name = self.current_token.value
+        self.eat("IDENT")
+
+        self.eat("LPAREN")
+        index_expr = self.expr()
+        self.eat("RPAREN")
+
+        self.eat_ident_value("to")
+
+        self.eat("LPAREN")
+        value_expr = self.expr()
+        self.eat("RPAREN")
+        return SetListItem(name, index_expr, value_expr)
+
+    def add_statement(self):
+        self.eat_ident_value("add")
+        if self.current_token.type != "IDENT":
+            self.error_here("Expected list name after add")
+        name = self.current_token.value
+        self.eat("IDENT")
+
+        self.eat("LPAREN")
+        value_expr = self.expr()
+        self.eat("RPAREN")
+        return AddListItem(name, value_expr)
+
+    def remove_statement(self):
+        self.eat_ident_value("remove")
+        if self.current_token.type != "IDENT":
+            self.error_here("Expected list name after remove")
+        name = self.current_token.value
+        self.eat("IDENT")
+        self.eat("LPAREN")
+        index_expr = self.expr()
+        self.eat("RPAREN")
+        return RemoveListItem(name, index_expr)
+
+    def match_statement(self):
+        # match <expr> { <literal> { ... } ... else { ... } }
+        self.eat("MATCH")
+        expr = self.expr()
+
+        self.eat("LBRACE")
+        self.skip_newlines()
+
+        cases = []
+        else_block = None
+
+        while self.current_token.type != "RBRACE":
+            if self.current_token.type == "ELSE":
+                if else_block is not None:
+                    self.error_here("match else already defined")
+                self.eat("ELSE")
+                else_block = self.block()
+                self.skip_newlines()
+                if self.current_token.type != "RBRACE":
+                    self.error_here("match else must be last")
+                break
+
+            lit = self.match_case_literal()
+            blk = self.block()
+            cases.append((lit.value, blk))
+            self.skip_newlines()
+
+        self.eat("RBRACE")
+        return Match(expr, cases, else_block)
+
+    def match_case_literal(self):
+        tok = self.current_token
+        if tok.type == "NUMBER":
+            self.eat("NUMBER")
+            return Literal(tok.value)
+        if tok.type == "STRING":
+            self.eat("STRING")
+            return Literal(tok.value)
+        if tok.type == "BOOL":
+            self.eat("BOOL")
+            return Literal(tok.value)
+        self.error_here("match case must be a literal")
     
     def while_statement(self):
         self.eat("WHILE")
@@ -85,7 +219,7 @@ class Parser:
         self.eat("IDENT")
 
         # typed assignment:  name TYPE_* value
-        if self.current_token.type in ("TYPE_STRING", "TYPE_INT", "TYPE_FLOAT", "TYPE_BOOL"):
+        if self.current_token.type in ("TYPE_STRING", "TYPE_INT", "TYPE_FLOAT", "TYPE_BOOL", "TYPE_LIST", "TYPE_DICT"):
             type_token = self.current_token
             self.eat(type_token.type)  # consume TYPE_*
 
@@ -98,7 +232,7 @@ class Parser:
         if self.current_token.type == "LPAREN":
             return self.finish_call(name_token.value)
 
-        raise Exception("After a name, expected a type marker (=s/=i/=f/=b) or '('")
+        raise Exception("After a name, expected a type marker (=s/=i/=f/=b/=l/=d) or '('")
 
     def call_statement(self):
         # WRITE is treated like a keyword, but we compile it like a function call
@@ -119,19 +253,36 @@ class Parser:
         return Call(func_name, args)
 
     def if_statement(self):
+        # Grammar:
+        #   IF expr block (ELIF expr block)* (ELSE block)?
+        # Elif chains are represented as nested If nodes in else_block.
+
         self.eat("IF")
         condition = self.expr()
         then_block = self.block()
 
-        # else can be on same line or next line, so allow NEWLINEs here
+        root = If(condition, then_block, None)
+        current = root
+
+        # elif/else can be on same line or next line
         self.skip_newlines()
 
-        else_block = None
+        while self.current_token.type == "ELIF":
+            self.eat("ELIF")
+            elif_cond = self.expr()
+            elif_block = self.block()
+
+            nested = If(elif_cond, elif_block, None)
+            current.else_block = nested
+            current = nested
+
+            self.skip_newlines()
+
         if self.current_token.type == "ELSE":
             self.eat("ELSE")
-            else_block = self.block()
+            current.else_block = self.block()
 
-        return If(condition, then_block, else_block)
+        return root
 
     def block(self):
         self.eat("LBRACE")
@@ -178,8 +329,8 @@ class Parser:
         param_name = self.current_token.value
         self.eat("IDENT")
 
-        if self.current_token.type not in ("TYPE_STRING", "TYPE_INT", "TYPE_FLOAT", "TYPE_BOOL"):
-            raise Exception("Expected parameter type marker (=s/=i/=f/=b)")
+        if self.current_token.type not in ("TYPE_STRING", "TYPE_INT", "TYPE_FLOAT", "TYPE_BOOL", "TYPE_LIST", "TYPE_DICT"):
+            raise Exception("Expected parameter type marker (=s/=i/=f/=b/=l/=d)")
 
         type_token = self.current_token
         self.eat(type_token.type)
@@ -267,7 +418,7 @@ class Parser:
             return Binary(Literal(0), "-", self.unary())
         return self.primary()
 
-    # primary -> NUMBER | STRING | BOOL | IDENT | call | (expr)
+    # primary -> NUMBER | STRING | BOOL | IDENT | list_literal | (expr)
     def primary(self):
         tok = self.current_token
 
@@ -287,6 +438,11 @@ class Parser:
             name = tok.value
             self.eat("IDENT")
 
+            # list access expression: call <name> or call <name>(<index>)
+            # If a user defines a function named call, call(...) still parses as a normal call.
+            if name == "call" and self.current_token.type == "IDENT":
+                return self.call_index_expr_from_ident()
+
             # function call like foo(...)
             if self.current_token.type == "LPAREN":
                 return self.finish_call(name)
@@ -297,14 +453,69 @@ class Parser:
             # allow write(...) inside expressions too (optional, but nice)
             return self.call_statement()
 
+        if tok.type == "LBRACKET":
+            return self.list_literal()
+
+        if tok.type == "LBRACE":
+            return self.dict_literal()
+
         if tok.type == "LPAREN":
             self.eat("LPAREN")
             node = self.expr()
             self.eat("RPAREN")
             return node
 
-        raise Exception(f"Unexpected token in expression: {tok.type}")
+        raise Exception(f"Unexpected token in expression: {tok.type} at line {tok.line}, col {tok.column}")
 
+    def list_literal(self):
+        self.eat("LBRACKET")
+        items = []
+        if self.current_token.type != "RBRACKET":
+            items.append(self.expr())
+            while self.current_token.type == "COMMA":
+                self.eat("COMMA")
+                items.append(self.expr())
+        self.eat("RBRACKET")
+        return ListLiteral(items)
+
+    def call_index_expr_from_ident(self):
+        # Assumes the leading 'call' IDENT has already been consumed.
+        if self.current_token.type != "IDENT":
+            self.error_here("Expected list name after call")
+        name = self.current_token.value
+        self.eat("IDENT")
+
+        if self.current_token.type == "LPAREN":
+            self.eat("LPAREN")
+            index_expr = self.expr()
+            self.eat("RPAREN")
+            return IndexAccess(name, index_expr)
+
+        return IndexAccess(name, None)
+
+    def dict_literal(self):
+        # Dict literal: { "k": expr, "k2": expr }
+        # Keys must be string literals for v1.
+        self.eat("LBRACE")
+        pairs = []
+
+        if self.current_token.type != "RBRACE":
+            while True:
+                if self.current_token.type != "STRING":
+                    self.error_here("dict key must be a string literal")
+                key_tok = self.current_token
+                self.eat("STRING")
+                self.eat("COLON")
+                value_expr = self.expr()
+                pairs.append((Literal(key_tok.value), value_expr))
+
+                if self.current_token.type == "COMMA":
+                    self.eat("COMMA")
+                    continue
+                break
+
+        self.eat("RBRACE")
+        return DictLiteral(pairs)
     # ---------- HELPERS ----------
     def type_token_to_short(self, type_token):
         mapping = {
@@ -312,6 +523,8 @@ class Parser:
             "TYPE_INT": "i",
             "TYPE_FLOAT": "f",
             "TYPE_BOOL": "b",
+            "TYPE_LIST": "l",
+            "TYPE_DICT": "d",
         }
         return mapping[type_token]
 

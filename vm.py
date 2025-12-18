@@ -148,6 +148,132 @@ class VM:
                 self.stack.append(self.stack[-1])
                 self.ip += 1
 
+            elif opcode == "BUILD_LIST":
+                n = arg
+                if not isinstance(n, int) or n < 0:
+                    raise Exception(f"Invalid BUILD_LIST arg: {n}")
+                items = []
+                for _ in range(n):
+                    items.append(self.pop())
+                items.reverse()
+                self.stack.append(items)
+                self.ip += 1
+
+            elif opcode == "BUILD_DICT":
+                n = arg
+                if not isinstance(n, int) or n < 0:
+                    raise Exception(f"Invalid BUILD_DICT arg: {n}")
+                d = {}
+                for _ in range(n):
+                    value = self.pop()
+                    key = self.pop()
+                    if not isinstance(key, str):
+                        raise Exception("dict keys must be strings")
+                    d[key] = value
+                self.stack.append(d)
+                self.ip += 1
+
+            elif opcode == "INDEX_GET":
+                key = self.pop()
+                target = self.pop()
+                if isinstance(target, list):
+                    if not isinstance(key, int):
+                        raise Exception("index not integer")
+                    if key < 0 or key >= len(target):
+                        raise Exception("index out of range")
+                    self.stack.append(target[key])
+                elif isinstance(target, dict):
+                    if not isinstance(key, str):
+                        raise Exception("dict key must be string")
+                    if key not in target:
+                        raise Exception(f"key not found: {key}")
+                    self.stack.append(target[key])
+                else:
+                    raise Exception("target not indexable")
+                self.ip += 1
+
+            elif opcode == "INDEX_SET":
+                value = self.pop()
+                key = self.pop()
+                target = self.pop()
+                if isinstance(target, list):
+                    if not isinstance(key, int):
+                        raise Exception("index not integer")
+                    if key < 0 or key >= len(target):
+                        raise Exception("index out of range")
+                    target[key] = value
+                elif isinstance(target, dict):
+                    if not isinstance(key, str):
+                        raise Exception("dict key must be string")
+                    target[key] = value
+                else:
+                    raise Exception("target not indexable")
+                self.ip += 1
+
+            elif opcode == "INDEX_REMOVE":
+                key = self.pop()
+                target = self.pop()
+                if isinstance(target, list):
+                    if not isinstance(key, int):
+                        raise Exception("index not integer")
+                    if key < 0 or key >= len(target):
+                        raise Exception("index out of range")
+                    del target[key]
+                elif isinstance(target, dict):
+                    if not isinstance(key, str):
+                        raise Exception("dict key must be string")
+                    if key not in target:
+                        raise Exception(f"key not found: {key}")
+                    del target[key]
+                else:
+                    raise Exception("target not indexable")
+                self.ip += 1
+
+            elif opcode == "LIST_GET":
+                index = self.pop()
+                target = self.pop()
+                if not isinstance(target, list):
+                    raise Exception("target not a list")
+                if not isinstance(index, int):
+                    raise Exception("index not integer")
+                if index < 0 or index >= len(target):
+                    raise Exception("index out of range")
+                self.stack.append(target[index])
+                self.ip += 1
+
+            elif opcode == "LIST_SET":
+                value = self.pop()
+                index = self.pop()
+                target = self.pop()
+                if not isinstance(target, list):
+                    raise Exception("target not a list")
+                if not isinstance(index, int):
+                    raise Exception("index not integer")
+                if index < 0 or index >= len(target):
+                    raise Exception("index out of range")
+                target[index] = value
+                self.ip += 1
+
+            elif opcode == "LIST_APPEND":
+                value = self.pop()
+                target = self.pop()
+                if not isinstance(target, list):
+                    raise Exception("target not a list")
+                target.append(value)
+                self.ip += 1
+
+            elif opcode == "LIST_REMOVE":
+                index = self.pop()
+                target = self.pop()
+                if not isinstance(target, list):
+                    raise Exception("target not a list")
+                if not isinstance(index, int):
+                    raise Exception("index not integer")
+                if index < 0 or index >= len(target):
+                    raise Exception("index out of range")
+                del target[index]
+                self.ip += 1
+
             elif opcode == "NOT":
                 a = self.pop()
                 a = self.require_bool(a, "not")
@@ -241,6 +367,81 @@ class VM:
                         self.stack.append(self.conv_bool(args[0]))
                     except Exception:
                         self.stack.append(None)
+                elif name == "amount":
+                    if argc != 1:
+                        raise Exception("amount() must have exactly 1 argument")
+                    v = args[0]
+                    if isinstance(v, list):
+                        self.stack.append(len(v))
+                    elif isinstance(v, str):
+                        self.stack.append(len(v))
+                    else:
+                        raise Exception("amount() expects list or string")
+                elif name == "del":
+                    if argc != 1:
+                        raise Exception("del() must have exactly 1 argument")
+                    v = args[0]
+                    if not isinstance(v, list):
+                        raise Exception("target not a list")
+                    if len(v) == 0:
+                        raise Exception("del() on empty list")
+                    self.stack.append(v.pop())
+                elif name == "save":
+                    if argc != 2:
+                        raise Exception("save() must have exactly 2 arguments")
+                    path = str(args[0])
+                    text = str(args[1])
+                    try:
+                        f = open(path, "w", encoding="utf-8")
+                    except Exception:
+                        raise Exception(f"cannot open file: {path}")
+                    try:
+                        f.write(text)
+                        f.close()
+                    except Exception:
+                        try:
+                            f.close()
+                        except Exception:
+                            pass
+                        raise Exception(f"cannot write file: {path}")
+                    self.stack.append(True)
+                elif name == "append":
+                    if argc != 2:
+                        raise Exception("append() must have exactly 2 arguments")
+                    path = str(args[0])
+                    text = str(args[1])
+                    try:
+                        f = open(path, "a", encoding="utf-8")
+                    except Exception:
+                        raise Exception(f"cannot open file: {path}")
+                    try:
+                        f.write(text)
+                        f.close()
+                    except Exception:
+                        try:
+                            f.close()
+                        except Exception:
+                            pass
+                        raise Exception(f"cannot write file: {path}")
+                    self.stack.append(True)
+                elif name == "load":
+                    if argc != 1:
+                        raise Exception("load() must have exactly 1 argument")
+                    path = str(args[0])
+                    try:
+                        f = open(path, "r", encoding="utf-8")
+                    except Exception:
+                        raise Exception(f"cannot open file: {path}")
+                    try:
+                        data = f.read()
+                        f.close()
+                    except Exception:
+                        try:
+                            f.close()
+                        except Exception:
+                            pass
+                        raise Exception(f"cannot read file: {path}")
+                    self.stack.append(data)
                 else:
                     raise Exception(f"Unknown builtin: {name}")
 

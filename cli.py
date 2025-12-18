@@ -28,9 +28,27 @@ def ast_to_dict(node):
         d["op"] = node.op
         d["left"] = ast_to_dict(node.left)
         d["right"] = ast_to_dict(node.right)
+    elif t == "Unary":
+        d["op"] = node.op
+        d["expr"] = ast_to_dict(node.expr)
     elif t == "Call":
         d["name"] = node.name
         d["args"] = [ast_to_dict(a) for a in node.args]
+    elif t == "ListLiteral":
+        d["items"] = [ast_to_dict(i) for i in node.items]
+    elif t == "ListAccess":
+        d["name"] = node.name
+        d["index"] = ast_to_dict(node.index_expr)
+    elif t == "SetListItem":
+        d["name"] = node.name
+        d["index"] = ast_to_dict(node.index_expr)
+        d["value"] = ast_to_dict(node.value_expr)
+    elif t == "AddListItem":
+        d["name"] = node.name
+        d["value"] = ast_to_dict(node.value_expr)
+    elif t == "RemoveListItem":
+        d["name"] = node.name
+        d["index"] = ast_to_dict(node.index_expr)
     elif t == "Block":
         d["statements"] = [ast_to_dict(s) for s in node.statements]
     elif t == "If":
@@ -40,6 +58,20 @@ def ast_to_dict(node):
     elif t == "While":
         d["condition"] = ast_to_dict(node.condition)
         d["body"] = ast_to_dict(node.body)
+    elif t == "For":
+        d["var_name"] = node.var_name
+        d["iterable"] = ast_to_dict(node.iterable_expr)
+        d["body"] = ast_to_dict(node.body)
+    elif t == "Stop":
+        pass
+    elif t == "Continue":
+        pass
+    elif t == "FuncDef":
+        d["name"] = node.name
+        d["params"] = list(node.params)
+        d["body"] = ast_to_dict(node.body)
+    elif t == "Return":
+        d["expr"] = ast_to_dict(node.expr)
 
     else:
         d["raw"] = str(node)
@@ -68,27 +100,35 @@ def pretty(obj, indent=0):
 
 
 def cmd_parse(path):
-    with open(path, "r", encoding="utf-8") as f:
-        code = f.read()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            code = f.read()
 
-    lexer = Lexer(code)
-    parser = Parser(lexer)
-    program = parser.parse()
+        lexer = Lexer(code)
+        parser = Parser(lexer)
+        program = parser.parse()
 
-    tree = ast_to_dict(program)
-    print(pretty(tree))
+        tree = ast_to_dict(program)
+        print(pretty(tree))
+    except Exception as e:
+        print(f"Parse error: {e}")
+        sys.exit(1)
 
 
 def cmd_build(path):
-    with open(path, "r", encoding="utf-8") as f:
-        code = f.read()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            code = f.read()
 
-    lexer = Lexer(code)
-    parser = Parser(lexer)
-    program = parser.parse()
+        lexer = Lexer(code)
+        parser = Parser(lexer)
+        program = parser.parse()
 
-    compiler = Compiler()
-    bc = compiler.compile(program)
+        compiler = Compiler()
+        bc = compiler.compile(program)
+    except Exception as e:
+        print(f"Build error: {e}")
+        sys.exit(1)
 
     print("CONSTS:")
     for i, c in enumerate(bc.consts):
@@ -127,21 +167,26 @@ def main():
 
     
 def cmd_run(path):
-    with open(path, "r", encoding="utf-8") as f:
-        code = f.read()
-
-    lexer = Lexer(code)
-    parser = Parser(lexer)
-    program = parser.parse()
-
-    compiler = Compiler()
-    bc = compiler.compile(program)
-
-    vm = VM(bc)
+    vm = None
     try:
+        with open(path, "r", encoding="utf-8") as f:
+            code = f.read()
+
+        lexer = Lexer(code)
+        parser = Parser(lexer)
+        program = parser.parse()
+
+        compiler = Compiler()
+        bc = compiler.compile(program)
+
+        vm = VM(bc)
         vm.run()
     except Exception as e:
-        print(f"Runtime error: {e}")
+        # If the VM was created, include instruction pointer.
+        if vm is not None:
+            print(f"Runtime error at ip={vm.ip:04d}: {e}")
+        else:
+            print(f"Runtime error: {e}")
         sys.exit(1)
 
 
