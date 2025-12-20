@@ -1,4 +1,6 @@
+import os
 import sys
+import traceback
 
 from vm import VM
 from compiler import Compiler
@@ -20,8 +22,6 @@ def ast_to_dict(node):
         d["name"] = node.name
         d["var_type"] = node.var_type
         d["value"] = ast_to_dict(node.value)
-    elif t == "Literal":
-        d["value"] = node.value
     elif t == "Var":
         d["name"] = node.name
     elif t == "Binary":
@@ -72,6 +72,9 @@ def ast_to_dict(node):
         d["body"] = ast_to_dict(node.body)
     elif t == "Return":
         d["expr"] = ast_to_dict(node.expr)
+    elif t == "Import":
+        d["path"] = node.path_literal
+        d["alias"] = getattr(node, "alias", None)
 
     else:
         d["raw"] = str(node)
@@ -144,29 +147,181 @@ def cmd_build(path):
         print(f"  {i:04d}  {ins}")
 
 
+def _count_braces_delta(line: str) -> int:
+    # Minimal brace balancer for REPL multiline input.
+    # Ignores braces inside "..." or '...' strings (best-effort; no escape handling).
+    delta = 0
+    in_single = False
+    in_double = False
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if ch == "#" and not in_single and not in_double:
+            break
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif not in_single and not in_double:
+            if ch == "{":
+                delta += 1
+            elif ch == "}":
+                delta -= 1
+        i += 1
+    return delta
+
+
+def cmd_repl(debug: bool = False):
+    # Create an initial empty VM and keep it alive across snippets.
+    try:
+        lexer = Lexer("")
+        parser = Parser(lexer)
+        program = parser.parse()
+        compiler = Compiler(source_path="<repl>")
+        bc = compiler.compile(program)
+
+        vm = VM(bc, base_dir=os.getcwd(), entry_file=None)
+    except Exception as e:
+        if debug:
+            traceback.print_exc()
+        else:
+            print(f"REPL init error: {e}")
+        sys.exit(1)
+
+    print("Fallen REPL. Type :q to quit.")
+
+    buffer_lines = []
+    brace_depth = 0
+    while True:
+        prompt = "fallen> " if not buffer_lines else "...> "
+        try:
+            line = input(prompt)
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+
+        stripped = line.strip()
+        if not buffer_lines and stripped in (":q", ":quit", "quit", "exit"):
+            break
+
+        # Allow blank lines to submit when not inside a block.
+        if not stripped and brace_depth == 0 and not buffer_lines:
+            continue
+
+        buffer_lines.append(line)
+        brace_depth += _count_braces_delta(line)
+
+        # Wait for block completion if braces aren't balanced yet.
+        if brace_depth > 0:
+            continue
+
+        source = "\n".join(buffer_lines) + "\n"
+        buffer_lines = []
+        brace_depth = 0
+
+        try:
+            # First, try parsing as a normal program (statements).
+            try:
+                lexer = Lexer(source)
+                parser = Parser(lexer)
+                program = parser.parse()
+            except Exception as parse_err:
+                # If that fails, try parsing as a single expression and auto-print it.
+                try:
+                    from ast_nodes import Program, Call
+
+                    lexer = Lexer(source)
+                    parser = Parser(lexer)
+                    expr = parser.expr()
+                    parser.skip_newlines()
+                    if parser.current_token.type != "EOF":
+                        raise Exception("extra tokens")
+                    program = Program([Call("write", [expr])])
+                except Exception:
+                    raise parse_err
+
+            compiler = Compiler(source_path="<repl>")
+            bc = compiler.compile(program)
+
+            start_ip, end_ip = vm.link_bytecode(bc)
+            saved_env = vm.env
+            saved_func = vm.current_function_name
+            saved_file = vm.current_file_path
+            vm.env = vm.globals
+            vm.current_function_name = "<repl>"
+            vm.current_file_path = "<repl>"
+            try:
+                vm.run_range(start_ip, end_ip)
+            finally:
+                vm.env = saved_env
+                vm.current_function_name = saved_func
+                vm.current_file_path = saved_file
+        except Exception as e:
+            if debug:
+                traceback.print_exc()
+            else:
+                print(str(e))
+
+
 def main():
+    debug = False
+    if "--debug" in sys.argv:
+        debug = True
+        sys.argv.remove("--debug")
+
+    if len(sys.argv) < 2:
+        print("Usage:")
+        print("  python cli.py parse <file.fallen>")
+        print("  python cli.py build <file.fallen>")
+        print("  python cli.py run <file.fallen>")
+        print("  python cli.py repl")
+        print("  (optional) --debug to show Python traceback")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+
+    if cmd == "repl":
+        if len(sys.argv) != 2:
+            print("Usage:")
+            print("  python cli.py repl")
+            sys.exit(1)
+        cmd_repl(debug=debug)
+        return
+
     if len(sys.argv) < 3:
         print("Usage:")
         print("  python cli.py parse <file.fallen>")
         print("  python cli.py build <file.fallen>")
         print("  python cli.py run <file.fallen>")
+        print("  python cli.py repl")
+        print("  (optional) --debug to show Python traceback")
         sys.exit(1)
 
-    cmd = sys.argv[1]
     path = sys.argv[2]
+    extra = sys.argv[3:]
 
     if cmd == "parse":
+        if extra:
+            print("Parse does not accept extra arguments.")
+            sys.exit(1)
         cmd_parse(path)
     elif cmd == "build":
+        if extra:
+            print("Build does not accept extra arguments.")
+            sys.exit(1)
         cmd_build(path)
     elif cmd == "run":
-        cmd_run(path)
+        script_args = extra
+        if "--" in extra:
+            i = extra.index("--")
+            script_args = extra[i + 1 :]
+        cmd_run(path, debug=debug, argv=script_args)
     else:
         print(f"Unknown command: {cmd}")
         sys.exit(1)
 
     
-def cmd_run(path):
+def cmd_run(path, debug: bool = False, argv=None):
     vm = None
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -176,17 +331,18 @@ def cmd_run(path):
         parser = Parser(lexer)
         program = parser.parse()
 
-        compiler = Compiler()
+        abs_path = os.path.abspath(path)
+        compiler = Compiler(source_path=abs_path)
         bc = compiler.compile(program)
 
-        vm = VM(bc)
+        base_dir = os.path.dirname(os.path.abspath(path))
+        vm = VM(bc, base_dir=base_dir, entry_file=abs_path, argv=argv)
         vm.run()
     except Exception as e:
-        # If the VM was created, include instruction pointer.
-        if vm is not None:
-            print(f"Runtime error at ip={vm.ip:04d}: {e}")
+        if debug:
+            traceback.print_exc()
         else:
-            print(f"Runtime error: {e}")
+            print(str(e))
         sys.exit(1)
 
 

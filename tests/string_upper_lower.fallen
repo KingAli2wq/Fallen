@@ -1,0 +1,2 @@
+write(upper("Ali"))
+write(lower("HeLLo"))

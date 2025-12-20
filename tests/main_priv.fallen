@@ -1,0 +1,7 @@
+import "mod_priv.fallen"
+
+write(x)
+write(add(2, 3))
+
+# should be private (runtime error)
+write(_helper())

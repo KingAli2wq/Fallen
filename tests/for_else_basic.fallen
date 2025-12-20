@@ -1,0 +1,6 @@
+xs =l ["a", "b"]
+for x in xs {
+  write(x)
+} else {
+  write("done")
+}

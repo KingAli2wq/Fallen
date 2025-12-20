@@ -1,0 +1,5 @@
+# import with alias: imported public symbols are rewritten to <alias>_<name>
+import "mod_a.fallen" as ma
+
+write(ma_x)
+write(ma_add(2, 3))

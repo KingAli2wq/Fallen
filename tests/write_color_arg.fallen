@@ -1,0 +1,2 @@
+write("Error", "red")
+write("OK", "green")

@@ -1,0 +1,2 @@
+import "import_circular_b.fallen"
+write("A done")

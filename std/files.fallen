@@ -1,0 +1,11 @@
+func read_text(path =s) {
+    return read(path)
+}
+
+func write_text(path =s, text =s) {
+    return save(path, text)
+}
+
+func append_text(path =s, text =s) {
+    return change(path, text)
+}

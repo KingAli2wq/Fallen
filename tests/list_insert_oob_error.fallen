@@ -1,0 +1,5 @@
+nums =l [1, 2, 3]
+
+# index == len(nums)+1 should error
+insert(nums, 4, 9)
+write("unreachable")

@@ -1,6 +1,5 @@
 func add(a =i, b =i) {
   return a + b
 }
-
 x =i add(2, 3)
 write(x)

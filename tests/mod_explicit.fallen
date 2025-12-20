@@ -1,0 +1,12 @@
+x =i 1
+export x
+
+func add(a =i, b =i) {
+    return a + b
+}
+export add
+
+func _helper() {
+    return 999
+}
+export _helper

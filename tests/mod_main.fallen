@@ -1,0 +1,4 @@
+import "mod_a.fallen"
+
+write(x)
+write(add(2, 3))

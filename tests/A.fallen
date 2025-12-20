@@ -1,0 +1,2 @@
+my_list =d {"name": "Ali", "age": 19, "school": "mmgc"}
+write(call my_list("name"))

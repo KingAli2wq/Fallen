@@ -1,0 +1,5 @@
+func pair(a =s, b =s) {
+  return a + "-" + b
+}
+write(pair(b:"B", a:"A"))
+write(pair("A", b:"B"))

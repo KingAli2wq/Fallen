@@ -1,0 +1,7 @@
+nums =l [1, 2, 3]
+
+insert(nums, 0, 99)
+write(nums)
+
+insert(nums, amount(nums), 42)
+write(nums)

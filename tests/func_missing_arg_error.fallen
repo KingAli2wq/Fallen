@@ -1,0 +1,4 @@
+func need(a =s, b =s) {
+  return a + b
+}
+write(need(a:"x"))

@@ -1,0 +1,10 @@
+func crash() {
+  nums =l [1]
+  write(call nums(5))
+}
+
+func main() {
+  crash()
+}
+
+main()

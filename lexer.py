@@ -38,6 +38,12 @@ class Lexer:
             return None
         return self.text[nxt]
 
+    def peek_n(self, n):
+        idx = self.pos + n
+        if idx >= len(self.text):
+            return None
+        return self.text[idx]
+
     # IMPORTANT: skip spaces/tabs only (NOT newlines)
     def skip_whitespace(self):
         while self.current_char and self.current_char in " \t\r":
@@ -73,6 +79,12 @@ class Lexer:
             return Token("FUNC", line=start_line, column=start_col)
         if result == "return":
             return Token("RETURN", line=start_line, column=start_col)
+        if result == "import":
+            return Token("IMPORT", line=start_line, column=start_col)
+        if result == "export":
+            return Token("EXPORT", line=start_line, column=start_col)
+        if result == "trace":
+            return Token("TRACE", line=start_line, column=start_col)
         if result == "write":
             return Token("WRITE", line=start_line, column=start_col)
         if result == "for":
@@ -84,6 +96,8 @@ class Lexer:
         if result == "false":
             return Token("BOOL", False, line=start_line, column=start_col)
         if result == "stop":
+            return Token("STOP", line=start_line, column=start_col)
+        if result == "break":
             return Token("STOP", line=start_line, column=start_col)
         if result == "continue":
             return Token("CONTINUE", line=start_line, column=start_col)
@@ -110,20 +124,63 @@ class Lexer:
     def read_string(self):
         start_line, start_col = self.line, self.column
         quote = self.current_char  # ' or "
+        assert quote is not None
         self.advance()  # skip opening quote
         result = ""
 
         while self.current_char and self.current_char != quote:
             if self.current_char == "\\":
-                # minimal escape support: \n, \t, \\, \" and \'
+                # escape support: \n, \t, \\, \" and \', plus aliases \line and \tab
                 self.advance()  # consume backslash
                 if self.current_char is None:
                     break
+
+                # \uXXXX -> unicode codepoint
+                if self.current_char == "u":
+                    h1, h2, h3, h4 = self.peek(), self.peek_n(2), self.peek_n(3), self.peek_n(4)
+                    hex_digits = [h1, h2, h3, h4]
+                    if all(d is not None and d in "0123456789abcdefABCDEF" for d in hex_digits):
+                        code = "".join(hex_digits)
+                        result += chr(int(code, 16))
+                        # consume u + 4 hex digits
+                        for _ in range(5):
+                            self.advance()
+                        continue
+
+                # \line -> newline
+                if (
+                    self.current_char == "l"
+                    and self.peek() == "i"
+                    and self.peek_n(2) == "n"
+                    and self.peek_n(3) == "e"
+                ):
+                    result += "\n"
+                    # consume l i n e
+                    for _ in range(4):
+                        self.advance()
+                    continue
+
+                # 	ab -> tab
+                if (
+                    self.current_char == "t"
+                    and self.peek() == "a"
+                    and self.peek_n(2) == "b"
+                ):
+                    result += "\t"
+                    # consume t a b
+                    for _ in range(3):
+                        self.advance()
+                    continue
+
                 esc = self.current_char
                 if esc == "n":
                     result += "\n"
                 elif esc == "t":
                     result += "\t"
+                elif esc == "r":
+                    result += "\r"
+                elif esc == "0":
+                    result += "\0"
                 elif esc == "\\":
                     result += "\\"
                 elif esc == quote:
@@ -142,10 +199,97 @@ class Lexer:
             self.advance()
 
         if self.current_char != quote:
-            raise Exception("Unclosed string")
+            raise Exception(f"Unclosed string (started at line {start_line}, col {start_col})")
 
         self.advance()  # skip closing quote
         return Token("STRING", result, line=start_line, column=start_col)
+
+    def read_triple_string(self):
+        start_line, start_col = self.line, self.column
+        # Only supports triple double-quotes: """ ... """
+        if not (self.current_char == '"' and self.peek() == '"' and self.peek_n(2) == '"'):
+            raise Exception("Internal lexer error: expected triple-quoted string")
+
+        # consume opening """
+        self.advance()
+        self.advance()
+        self.advance()
+
+        result = ""
+        quote = '"'
+
+        while self.current_char is not None:
+            # closing """
+            if self.current_char == '"' and self.peek() == '"' and self.peek_n(2) == '"':
+                self.advance()
+                self.advance()
+                self.advance()
+                return Token("STRING", result, line=start_line, column=start_col)
+
+            if self.current_char == "\\":
+                # escape support: \n, \t, \\, \" and \', plus aliases \line and \tab
+                self.advance()  # consume backslash
+                if self.current_char is None:
+                    break
+
+                # \uXXXX -> unicode codepoint
+                if self.current_char == "u":
+                    h1, h2, h3, h4 = self.peek(), self.peek_n(2), self.peek_n(3), self.peek_n(4)
+                    hex_digits = [h1, h2, h3, h4]
+                    if all(d is not None and d in "0123456789abcdefABCDEF" for d in hex_digits):
+                        code = "".join(hex_digits)
+                        result += chr(int(code, 16))
+                        for _ in range(5):
+                            self.advance()
+                        continue
+
+                # \line -> newline
+                if (
+                    self.current_char == "l"
+                    and self.peek() == "i"
+                    and self.peek_n(2) == "n"
+                    and self.peek_n(3) == "e"
+                ):
+                    result += "\n"
+                    for _ in range(4):
+                        self.advance()
+                    continue
+
+                # 	ab -> tab
+                if (
+                    self.current_char == "t"
+                    and self.peek() == "a"
+                    and self.peek_n(2) == "b"
+                ):
+                    result += "\t"
+                    for _ in range(3):
+                        self.advance()
+                    continue
+
+                esc = self.current_char
+                if esc == "n":
+                    result += "\n"
+                elif esc == "t":
+                    result += "\t"
+                elif esc == "r":
+                    result += "\r"
+                elif esc == "0":
+                    result += "\0"
+                elif esc == "\\":
+                    result += "\\"
+                elif esc == quote:
+                    result += quote
+                elif esc == "'":
+                    result += "'"
+                else:
+                    result += esc
+                self.advance()
+                continue
+
+            result += self.current_char
+            self.advance()
+
+        raise Exception(f"Unclosed triple-quoted string (started at line {start_line}, col {start_col})")
 
     def get_next_token(self):
         while self.current_char:
@@ -175,6 +319,8 @@ class Lexer:
                 return self.read_number()
 
             # strings
+            if self.current_char == '"' and self.peek() == '"' and self.peek_n(2) == '"':
+                return self.read_triple_string()
             if self.current_char in "\"'":
                 return self.read_string()
 
@@ -208,7 +354,7 @@ class Lexer:
                     self.advance()
                     return Token("TYPE_DICT", line=start_line, column=start_col)
 
-                raise Exception("Expected type after '=' (use =s, =i, =f, =b)")
+                raise Exception(f"Expected type after '=' (use =s, =i, =f, =b, =l, =d) at line {start_line}, col {start_col}")
 
             # !=
             if self.current_char == "!" and self.peek() == "=":
@@ -291,6 +437,6 @@ class Lexer:
                 self.advance()
                 return Token("RBRACKET", line=start_line, column=start_col)
 
-            raise Exception(f"Unknown character: {self.current_char}")
+            raise Exception(f"Unknown character: {self.current_char} at line {self.line}, col {self.column}")
 
         return Token("EOF", line=self.line, column=self.column)

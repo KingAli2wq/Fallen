@@ -1,0 +1,12 @@
+# args() returns a list of CLI-provided args (excluding the file path)
+# Should work even when no args were provided.
+
+a =l args()
+write(amount(a))
+
+# If at least one arg is present, print the first one.
+if amount(a) > 0 {
+    write(call a(0))
+} else {
+    write("<none>")
+}

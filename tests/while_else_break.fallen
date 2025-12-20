@@ -1,0 +1,7 @@
+i =i 0
+while i < 5 {
+  break
+} else {
+  write("should_not_print")
+}
+write("after")

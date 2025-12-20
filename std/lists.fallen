@@ -1,0 +1,7 @@
+func amount_list(x =l) {
+    return amount(x)
+}
+
+func peek_last(x =l) {
+    return call x(amount(x) - 1)
+}

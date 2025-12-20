@@ -1,0 +1,5 @@
+func add(a =i, b =i 10) {
+  return a + b
+}
+write(add(5))
+write(add(5, 2))

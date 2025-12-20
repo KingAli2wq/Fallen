@@ -1,20 +1,27 @@
 from ast_nodes import (
     Program, VarAssign, Literal, Var, Binary, Unary, Call, Block, If, While, Stop, Continue, FuncDef, Return,
+    Import,
+    Export,
+    Trace,
     ListLiteral, ListAccess, SetListItem, AddListItem, RemoveListItem, For,
-    Match, DictLiteral, IndexAccess
+    Match, DictLiteral, IndexAccess,
+    CompareChain,
+    NamedArg,
 )
 
 class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
         self.current_token = self.lexer.get_next_token()
+        self.next_token = self.lexer.get_next_token()
         self.function_depth = 0
         self.block_depth = 0
 
     # move to next token, but only if it matches what we expect
     def eat(self, token_type):
         if self.current_token.type == token_type:
-            self.current_token = self.lexer.get_next_token()
+            self.current_token = self.next_token
+            self.next_token = self.lexer.get_next_token()
         else:
             tok = self.current_token
             raise Exception(f"Expected {token_type}, got {tok.type} at line {tok.line}, col {tok.column}")
@@ -49,16 +56,26 @@ class Parser:
 
     # ---------- STATEMENTS ----------
     def statement(self):
+        # import statement: import "file.fallen"
+        if self.current_token.type == "IMPORT":
+            return self.import_statement()
+
+        if self.current_token.type == "EXPORT":
+            return self.export_statement()
+
+        if self.current_token.type == "TRACE":
+            return self.trace_statement()
+
         # function definition (v1: only allowed at top-level)
         if self.current_token.type == "FUNC":
             if self.block_depth != 0:
-                raise Exception("func definitions are only allowed at top level")
+                self.error_here("func definitions are only allowed at top level")
             return self.func_def()
 
         # return statement (only valid inside a function)
         if self.current_token.type == "RETURN":
             if self.function_depth == 0:
-                raise Exception("return used outside of a function")
+                self.error_here("return used outside of a function")
             return self.return_statement()
 
         # if statement
@@ -86,9 +103,12 @@ class Parser:
 
         if self.current_token.type == "IDENT" and self.current_token.value == "call":
             # statement sugar: call <list>(<index>) prints the value
+            call_tok = self.current_token
             self.eat_ident_value("call")
-            expr = self.call_index_expr_from_ident()
-            return Call("write", [expr])
+            expr = self.call_index_expr_from_ident(call_line=call_tok.line)
+            node = Call("write", [expr])
+            node.line = call_tok.line
+            return node
 
 
         # WRITE keyword call
@@ -101,16 +121,70 @@ class Parser:
             # look ahead: could be assignment (TYPE_*) or a normal call like foo(...)
             return self.ident_start_statement()
         if self.current_token.type == "STOP":
+            tok = self.current_token
             self.eat("STOP")
-            return Stop()
+            node = Stop()
+            node.line = tok.line
+            return node
 
         if self.current_token.type == "CONTINUE":
+            tok = self.current_token
             self.eat("CONTINUE")
-            return Continue()
+            node = Continue()
+            node.line = tok.line
+            return node
 
         raise Exception(f"Unexpected token in statement: {self.current_token.type}")
 
+    def export_statement(self):
+        if self.block_depth != 0:
+            self.error_here("export is only allowed at top level")
+        tok = self.current_token
+        self.eat("EXPORT")
+        if self.current_token.type != "IDENT":
+            self.error_here("export expects an identifier")
+        name = self.current_token.value
+        self.eat("IDENT")
+        node = Export(name)
+        node.line = tok.line
+        return node
+
+    def trace_statement(self):
+        tok = self.current_token
+        self.eat("TRACE")
+
+        if self.current_token.type != "IDENT":
+            self.error_here("trace expects 'on' or 'off'")
+
+        mode = self.current_token.value
+        self.eat("IDENT")
+        if mode not in ("on", "off"):
+            raise Exception(f"trace expects 'on' or 'off', got {mode} at line {tok.line}, col {tok.column}")
+
+        node = Trace(enabled=(mode == "on"))
+        node.line = tok.line
+        return node
+
+    def import_statement(self):
+        tok = self.current_token
+        self.eat("IMPORT")
+        if self.current_token.type != "STRING":
+            self.error_here("import expects a string literal path")
+        path = self.current_token.value
+        self.eat("STRING")
+        alias = None
+        if self.current_token.type == "IDENT" and self.current_token.value == "as":
+            self.eat("IDENT")
+            if self.current_token.type != "IDENT":
+                self.error_here("import as expects an identifier")
+            alias = self.current_token.value
+            self.eat("IDENT")
+        node = Import(path, alias)
+        node.line = tok.line
+        return node
+
     def for_statement(self):
+        tok = self.current_token
         self.eat("FOR")
 
         if self.current_token.type != "IDENT":
@@ -121,9 +195,16 @@ class Parser:
         self.eat("IN")
         iterable_expr = self.expr()
         body = self.block()
-        return For(var_name, iterable_expr, body)
+        else_block = None
+        if self.current_token.type == "ELSE":
+            self.eat("ELSE")
+            else_block = self.block()
+        node = For(var_name, iterable_expr, body, else_block)
+        node.line = tok.line
+        return node
 
     def set_statement(self):
+        tok = self.current_token
         self.eat_ident_value("set")
         if self.current_token.type != "IDENT":
             self.error_here("Expected list name after set")
@@ -139,9 +220,12 @@ class Parser:
         self.eat("LPAREN")
         value_expr = self.expr()
         self.eat("RPAREN")
-        return SetListItem(name, index_expr, value_expr)
+        node = SetListItem(name, index_expr, value_expr)
+        node.line = tok.line
+        return node
 
     def add_statement(self):
+        tok = self.current_token
         self.eat_ident_value("add")
         if self.current_token.type != "IDENT":
             self.error_here("Expected list name after add")
@@ -151,9 +235,12 @@ class Parser:
         self.eat("LPAREN")
         value_expr = self.expr()
         self.eat("RPAREN")
-        return AddListItem(name, value_expr)
+        node = AddListItem(name, value_expr)
+        node.line = tok.line
+        return node
 
     def remove_statement(self):
+        tok = self.current_token
         self.eat_ident_value("remove")
         if self.current_token.type != "IDENT":
             self.error_here("Expected list name after remove")
@@ -162,10 +249,13 @@ class Parser:
         self.eat("LPAREN")
         index_expr = self.expr()
         self.eat("RPAREN")
-        return RemoveListItem(name, index_expr)
+        node = RemoveListItem(name, index_expr)
+        node.line = tok.line
+        return node
 
     def match_statement(self):
         # match <expr> { <literal> { ... } ... else { ... } }
+        tok = self.current_token
         self.eat("MATCH")
         expr = self.expr()
 
@@ -192,26 +282,41 @@ class Parser:
             self.skip_newlines()
 
         self.eat("RBRACE")
-        return Match(expr, cases, else_block)
+        node = Match(expr, cases, else_block)
+        node.line = tok.line
+        return node
 
     def match_case_literal(self):
         tok = self.current_token
         if tok.type == "NUMBER":
             self.eat("NUMBER")
-            return Literal(tok.value)
+            node = Literal(tok.value)
+            node.line = tok.line
+            return node
         if tok.type == "STRING":
             self.eat("STRING")
-            return Literal(tok.value)
+            node = Literal(tok.value)
+            node.line = tok.line
+            return node
         if tok.type == "BOOL":
             self.eat("BOOL")
-            return Literal(tok.value)
+            node = Literal(tok.value)
+            node.line = tok.line
+            return node
         self.error_here("match case must be a literal")
     
     def while_statement(self):
+        tok = self.current_token
         self.eat("WHILE")
         condition = self.expr()
         body = self.block()
-        return While(condition, body)
+        else_block = None
+        if self.current_token.type == "ELSE":
+            self.eat("ELSE")
+            else_block = self.block()
+        node = While(condition, body, else_block)
+        node.line = tok.line
+        return node
 
     def ident_start_statement(self):
         # we need to read the name first
@@ -226,53 +331,87 @@ class Parser:
             value_expr = self.expr()  # parse right side
             var_type = self.type_token_to_short(type_token.type)
 
-            return VarAssign(name_token.value, var_type, value_expr)
+            node = VarAssign(name_token.value, var_type, value_expr)
+            node.line = name_token.line
+            return node
 
         # function call: name(...)
         if self.current_token.type == "LPAREN":
-            return self.finish_call(name_token.value)
+            node = self.finish_call(name_token.value, call_line=name_token.line)
+            node.line = name_token.line
+            return node
 
         raise Exception("After a name, expected a type marker (=s/=i/=f/=b/=l/=d) or '('")
 
     def call_statement(self):
         # WRITE is treated like a keyword, but we compile it like a function call
+        tok = self.current_token
         self.eat("WRITE")
-        return self.finish_call("write")
+        node = self.finish_call("write", call_line=tok.line)
+        node.line = tok.line
+        return node
 
-    def finish_call(self, func_name):
+    def finish_call(self, func_name, call_line=None):
         self.eat("LPAREN")
 
         args = []
+        seen_named = False
         if self.current_token.type != "RPAREN":
-            args.append(self.expr())
+            args.append(self.call_arg())
+            if isinstance(args[-1], NamedArg):
+                seen_named = True
             while self.current_token.type == "COMMA":
                 self.eat("COMMA")
-                args.append(self.expr())
+                arg_node = self.call_arg()
+                if isinstance(arg_node, NamedArg):
+                    seen_named = True
+                elif seen_named:
+                    self.error_here("positional args cannot follow named args")
+                args.append(arg_node)
 
         self.eat("RPAREN")
-        return Call(func_name, args)
+        node = Call(func_name, args)
+        node.line = call_line
+        return node
+
+    def call_arg(self):
+        # Named arg syntax: name: expr
+        if self.current_token.type == "IDENT" and self.next_token.type == "COLON":
+            name = self.current_token.value
+            self.eat("IDENT")
+            self.eat("COLON")
+            value_expr = self.expr()
+            node = NamedArg(name, value_expr)
+            node.line = getattr(value_expr, "line", None)
+            return node
+
+        return self.expr()
 
     def if_statement(self):
         # Grammar:
         #   IF expr block (ELIF expr block)* (ELSE block)?
         # Elif chains are represented as nested If nodes in else_block.
 
+        tok = self.current_token
         self.eat("IF")
         condition = self.expr()
         then_block = self.block()
 
         root = If(condition, then_block, None)
+        root.line = tok.line
         current = root
 
         # elif/else can be on same line or next line
         self.skip_newlines()
 
         while self.current_token.type == "ELIF":
+            elif_tok = self.current_token
             self.eat("ELIF")
             elif_cond = self.expr()
             elif_block = self.block()
 
             nested = If(elif_cond, elif_block, None)
+            nested.line = elif_tok.line
             current.else_block = nested
             current = nested
 
@@ -299,6 +438,7 @@ class Parser:
         return Block(statements)
 
     def func_def(self):
+        tok = self.current_token
         self.eat("FUNC")
         if self.current_token.type != "IDENT":
             raise Exception("Expected function name after func")
@@ -316,11 +456,19 @@ class Parser:
 
         self.eat("RPAREN")
 
+        return_type = None
+        if self.current_token.type in ("TYPE_STRING", "TYPE_INT", "TYPE_FLOAT", "TYPE_BOOL", "TYPE_LIST", "TYPE_DICT"):
+            type_token = self.current_token
+            self.eat(type_token.type)
+            return_type = self.type_token_to_short(type_token.type)
+
         self.function_depth += 1
         body = self.block()
         self.function_depth -= 1
 
-        return FuncDef(name, params, body)
+        node = FuncDef(name, params, body, return_type)
+        node.line = tok.line
+        return node
 
     def param(self):
         if self.current_token.type != "IDENT":
@@ -335,12 +483,20 @@ class Parser:
         type_token = self.current_token
         self.eat(type_token.type)
 
-        return (param_name, self.type_token_to_short(type_token.type))
+        default_expr = None
+        # Optional default value (v1): `param =s "x"` or `param =i 10`
+        if self.current_token.type not in ("COMMA", "RPAREN"):
+            default_expr = self.expr()
+
+        return (param_name, self.type_token_to_short(type_token.type), default_expr)
 
     def return_statement(self):
+        tok = self.current_token
         self.eat("RETURN")
         expr = self.expr()
-        return Return(expr)
+        node = Return(expr)
+        node.line = tok.line
+        return node
 
     # ---------- EXPRESSIONS (math + comparisons) ----------
     # expr -> or_expr
@@ -374,16 +530,24 @@ class Parser:
 
     # comparison -> term ((==|!=|<|<=|>|>=) term)*
     def comparison(self):
-        node = self.term()
+        first = self.term()
 
-        while self.current_token.type in (
-            "EQEQ", "NOTEQ", "LT", "LTE", "GT", "GTE"
-        ):
+        ops = []
+        rest = []
+
+        while self.current_token.type in ("EQEQ", "NOTEQ", "LT", "LTE", "GT", "GTE"):
             op_token = self.current_token
             self.eat(op_token.type)
-            right = self.term()
-            node = Binary(node, self.op_token_to_text(op_token.type), right)
+            ops.append(self.op_token_to_text(op_token.type))
+            rest.append(self.term())
 
+        if not ops:
+            return first
+        if len(ops) == 1:
+            return Binary(first, ops[0], rest[0])
+
+        node = CompareChain(first, ops, rest)
+        node.line = getattr(first, "line", None)
         return node
 
     # term -> factor ((+|-) factor)*
@@ -395,6 +559,7 @@ class Parser:
             self.eat(op_token.type)
             right = self.factor()
             node = Binary(node, self.op_token_to_text(op_token.type), right)
+            node.line = op_token.line
 
         return node
 
@@ -407,15 +572,19 @@ class Parser:
             self.eat(op_token.type)
             right = self.unary()
             node = Binary(node, self.op_token_to_text(op_token.type), right)
+            node.line = op_token.line
 
         return node
 
     # unary -> (- unary) | primary
     def unary(self):
         if self.current_token.type == "MINUS":
+            tok = self.current_token
             self.eat("MINUS")
             # represent -x as (0 - x)
-            return Binary(Literal(0), "-", self.unary())
+            node = Binary(Literal(0), "-", self.unary())
+            node.line = tok.line
+            return node
         return self.primary()
 
     # primary -> NUMBER | STRING | BOOL | IDENT | list_literal | (expr)
@@ -424,15 +593,21 @@ class Parser:
 
         if tok.type == "NUMBER":
             self.eat("NUMBER")
-            return Literal(tok.value)
+            node = Literal(tok.value)
+            node.line = tok.line
+            return node
 
         if tok.type == "STRING":
             self.eat("STRING")
-            return Literal(tok.value)
+            node = Literal(tok.value)
+            node.line = tok.line
+            return node
 
         if tok.type == "BOOL":
             self.eat("BOOL")
-            return Literal(tok.value)
+            node = Literal(tok.value)
+            node.line = tok.line
+            return node
 
         if tok.type == "IDENT":
             name = tok.value
@@ -441,13 +616,17 @@ class Parser:
             # list access expression: call <name> or call <name>(<index>)
             # If a user defines a function named call, call(...) still parses as a normal call.
             if name == "call" and self.current_token.type == "IDENT":
-                return self.call_index_expr_from_ident()
+                return self.call_index_expr_from_ident(call_line=tok.line)
 
             # function call like foo(...)
             if self.current_token.type == "LPAREN":
-                return self.finish_call(name)
+                node = self.finish_call(name)
+                node.line = tok.line
+                return node
 
-            return Var(name)
+            node = Var(name)
+            node.line = tok.line
+            return node
 
         if tok.type == "WRITE":
             # allow write(...) inside expressions too (optional, but nice)
@@ -468,6 +647,7 @@ class Parser:
         raise Exception(f"Unexpected token in expression: {tok.type} at line {tok.line}, col {tok.column}")
 
     def list_literal(self):
+        tok = self.current_token
         self.eat("LBRACKET")
         items = []
         if self.current_token.type != "RBRACKET":
@@ -476,9 +656,11 @@ class Parser:
                 self.eat("COMMA")
                 items.append(self.expr())
         self.eat("RBRACKET")
-        return ListLiteral(items)
+        node = ListLiteral(items)
+        node.line = tok.line
+        return node
 
-    def call_index_expr_from_ident(self):
+    def call_index_expr_from_ident(self, call_line=None):
         # Assumes the leading 'call' IDENT has already been consumed.
         if self.current_token.type != "IDENT":
             self.error_here("Expected list name after call")
@@ -489,13 +671,18 @@ class Parser:
             self.eat("LPAREN")
             index_expr = self.expr()
             self.eat("RPAREN")
-            return IndexAccess(name, index_expr)
+            node = IndexAccess(name, index_expr)
+            node.line = call_line
+            return node
 
-        return IndexAccess(name, None)
+        node = IndexAccess(name, None)
+        node.line = call_line
+        return node
 
     def dict_literal(self):
         # Dict literal: { "k": expr, "k2": expr }
         # Keys must be string literals for v1.
+        tok = self.current_token
         self.eat("LBRACE")
         pairs = []
 
@@ -515,7 +702,9 @@ class Parser:
                 break
 
         self.eat("RBRACE")
-        return DictLiteral(pairs)
+        node = DictLiteral(pairs)
+        node.line = tok.line
+        return node
     # ---------- HELPERS ----------
     def type_token_to_short(self, type_token):
         mapping = {

@@ -1,0 +1,7 @@
+xs =l ["a", "b"]
+for x in xs {
+  break
+} else {
+  write("should_not_print")
+}
+write("after")

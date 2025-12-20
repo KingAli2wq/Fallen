@@ -1,0 +1,15 @@
+func concat(a =s, b =s) {
+    return a + b
+}
+
+func repeat(s =s, n =i) {
+    out =s ""
+    i =i 0
+
+    while i < n {
+        out =s out + s
+        i =i i + 1
+    }
+
+    return out
+}

@@ -1,35 +1,10 @@
 # Fallen Language — instruction.md (Complete Reference)
 
-This document is the **single source of truth** for how to write Fallen code.
+# Fallen Language — Instruction Guide
 
-It has two parts:
+This document is the up-to-date guide for everything Fallen supports right now.
 
-1. **Implemented (Confirmed)** — features that are clearly present in your current pipeline because they map to AST node types your CLI can print (`VarAssign`, `Literal`, `Binary`, `Call`, `If`, `While`, `Block`, etc.).
-2. **Language Spec (Target / Intended)** — features you have defined in conversation (example: list `set/add`, `call()` indexing, `enter()`, `conv_int/conv_float`, boolean operators). If any of these are not yet implemented in your `Lexer/Parser/Compiler/VM`, treat them as the **required behavior** to implement next.
-
----
-
-## Table of contents
-
-- 1. Quick start
-- 2. CLI commands
-- 3. Core syntax rules
-- 4. Data types and literals
-- 5. Variables and assignment
-- 6. Expressions and operators
-- 7. Conditionals: `if`, `else`
-- 8. Loops: `while`
-- 9. Functions and calls
-- 10. Built-in functions
-- 11. Lists
-- 12. Errors and debugging
-- 13. Style guide
-- 14. Examples (copy/paste)
-- 15. Compatibility notes / roadmap
-
----
-
-## 1) Quick start
+## Quick start
 
 Create a file `hello.fallen`:
 
@@ -38,173 +13,87 @@ write("Hello, Fallen!")
 ```
 
 Run it:
-```
+
+```bash
 python cli.py run hello.fallen
 ```
 
+## CLI
 
-## 2) CLI commands (Implemented / Confirmed)
+```bash
+python cli.py parse <file.fallen>   # print AST
+python cli.py build <file.fallen>   # print constants + bytecode
+python cli.py run <file.fallen>     # run on the VM
 
-Your CLI supports:
+# Interactive mode
+python cli.py repl                  # start a REPL (keeps state between lines)
 
-- Parse (print AST)
-  ```bash
-  python cli.py parse <file.fallen>
-  ```
-- Build (print constants + bytecode instructions)
-  ```bash
-  python cli.py build <file.fallen>
-  ```
-- Run (execute on VM)
-  ```bash
-  python cli.py run <file.fallen>
-  ```
-
-If the VM throws an exception:
-
-```text
-Runtime error: <message>
+# Show Python traceback (debug the interpreter itself)
+python cli.py run <file.fallen> --debug
+python cli.py repl --debug
 ```
 
-## 3) Core syntax rules (Implemented / Confirmed)
+## Syntax basics
 
-### Statements
-
-A program is a list of statements executed top-to-bottom.
-
-### Blocks
-
-Curly braces define a block:
+- Programs run top-to-bottom.
+- Blocks use braces `{ ... }`.
+- `#` starts a comment.
 
 ```fallen
-{
-    write("inside block")
+# comment
+if true {
+    write("ok")
 }
 ```
 
-Blocks are used by `if`, `else`, and `while`.
+## Types and assignment
 
-### Strings must use quotes
-
-```fallen
-"mmgc"  # string literal
-mmgc    # variable name
-```
-
-### Undefined variables are runtime errors
-
-If you reference a variable that does not exist, you should see:
-
-```text
-Runtime error: Undefined variable: <name>
-```
-
-## 4) Data types and literals
-
-### 4.1 Literals (Implemented / Confirmed as `Literal` nodes)
-
-Literals are values written directly in code.
-
-Common literals:
-
-```fallen
-"hello"     # string
-123         # integer
-3.14        # float
-true        # boolean
-false       # boolean
-```
-
-The exact literal set is determined by your Lexer + Parser. The runtime receives them as `Literal.value`.
-
-### 4.2 Types (Target / Intended)
-
-Fallen uses typed assignment via a marker.
-
-Recommended standard markers:
+Typed assignment markers:
 
 - `=s` string
-- `=i` integer
+- `=i` int
 - `=f` float
-- `=b` boolean
-
-Example:
+- `=b` bool
+- `=l` list
+- `=d` dict
 
 ```fallen
 name =s "Ali"
 age  =i 17
 pi   =f 3.14
 ok   =b true
+
+nums =l [1, 2, 3]
+cfg  =d {"mode": "dev"}
 ```
 
-## 5) Variables and assignment (Implemented / Confirmed)
-
-### 5.1 Create / assign
-
-General form:
-
-```text
-<name> =<type> <expression>
-```
-
-Examples:
+## Literals
 
 ```fallen
-school =s "mmgc"
-points =i 5
+"text"      # string
+123         # int
+3.14        # float
+true        # bool
+false       # bool
+
+[1, 2, 3]                 # list
+{"a": 1, "b": 2}         # dict (keys must be strings)
 ```
 
-### 5.2 Re-assign
+## Operators
 
-Assigning again overwrites the old value:
+### Math
+
+`+  -  *  /`
 
 ```fallen
-points =i 10
-points =i 11
+x =i 5 + 3
+y =i x * 2
 ```
 
-## 6) Expressions and operators
+### Comparisons
 
-### 6.1 Expressions (Implemented / Confirmed)
-
-Your AST supports these expression shapes:
-
-- Literal value
-- Variable reference
-- Binary operation
-- Function call
-
-Examples:
-
-```fallen
-"hello"                # literal
-x                      # variable
-x + 2                  # binary
-write("hi")            # call
-conv_int(enter("x"))   # nested calls
-```
-
-### 6.2 Operators (Implemented as `Binary` nodes; exact set depends on Lexer/Parser)
-
-Arithmetic (Target / Intended)
-
-```text
-+   -   *   /
-```
-
-Example:
-
-```fallen
-total =i 5 + 3
-```
-
-Comparisons (Target / Intended)
-
-```text
-==  !=  <  <=  >  >=
-```
-
-Example:
+`==  !=  <  <=  >  >=`
 
 ```fallen
 if score >= 50 {
@@ -212,95 +101,35 @@ if score >= 50 {
 }
 ```
 
-Boolean logic (Target / Intended)
+### Boolean logic (short-circuit)
 
-```text
-and   or   not
-```
-
-Examples:
+- `and` (short-circuits)
+- `or` (short-circuits)
+- `not`
 
 ```fallen
-if a == 1 and b == 2 {
-    write("both true")
-}
-
-if role == "admin" or role == "moderator" {
-    write("staff")
-}
-
-if not banned {
+if (role == "admin" or role == "mod") and not banned {
     write("welcome")
 }
 ```
 
-Implementation note: `not` is a unary operator. Many parsers represent it as a `Unary` node. If you don’t have a `Unary` node yet, you will need to add it (or treat `not x` as a special-case parse).
+Important: `if`/`while` conditions must be boolean.
 
-### 6.3 Operator precedence (Target / Intended)
+## Control flow
 
-Recommended precedence rules (highest to lowest):
-
-1. Parentheses: `( ... )`
-2. Unary: `not`, unary `-`
-3. Multiply/divide: `*` `/`
-4. Add/subtract: `+` `-`
-5. Comparisons: `==` `!=` `<` `<=` `>` `>=`
-6. Boolean: `and`
-7. Boolean: `or`
-
-Use parentheses when you want to be explicit:
+### if / elif / else
 
 ```fallen
-if (a == 1 or a == 2) and b == 9 {
-    write("matched")
-}
-```
-
-## 7) Conditionals: `if`, `else` (Implemented / Confirmed)
-
-### 7.1 `if`
-
-```fallen
-if <condition> {
-    <statements>
-}
-```
-
-### 7.2 `if` + `else`
-
-```fallen
-if <condition> {
-    <statements>
+if x == 1 {
+    write("one")
+} elif x == 2 {
+    write("two")
 } else {
-    <statements>
+    write("other")
 }
 ```
 
-### 7.3 Example (including the “mmgc” fix)
-
-Correct usage with quotes:
-
-```fallen
-value =s enter("what is the name of your school? ")
-
-if value == "mmgc" {
-    write("Falcon")
-} else {
-    write("Unknown school")
-}
-```
-
-## 8) Loops: `while` (Implemented / Confirmed)
-
-### 8.1 Syntax
-
-```fallen
-while <condition> {
-    <statements>
-}
-```
-
-### 8.2 Example
+### while
 
 ```fallen
 i =i 0
@@ -310,298 +139,221 @@ while i < 3 {
 }
 ```
 
-## 9) Functions and calls
-
-### 9.1 Calls (Implemented / Confirmed as `Call` nodes)
-
-A call looks like:
-
-```text
-name(arg1, arg2, arg3)
-```
-
-Examples:
+### for
 
 ```fallen
-write("Hello")
-enter("Type: ")
-conv_int("123")
+nums =l [10, 20, 30]
+for n in nums {
+    write(n)
+}
 ```
 
-Arguments are expressions, so nesting is allowed:
+### stop / continue
+
+- `stop` exits the nearest loop.
+- `continue` skips to the next iteration.
+
+## Functions
+
+```fallen
+func add(a =i, b =i) {
+    return a + b
+}
+
+write(add(2, 3))
+```
+
+Notes:
+
+- Recursion is supported.
+- Reaching the end of a function returns `None`.
+
+## Built-in functions
+
+### write(x)
+
+Print one value.
+
+```fallen
+write("hi")
+```
+
+### enter(prompt)
+
+Reads user input (returns a string).
+
+```fallen
+name =s enter("Name: ")
+write(name)
+```
+
+### Conversions
+
+- `conv_int(x)`, `conv_float(x)`, `conv_bool(x)` convert or raise a runtime error.
+- `try_conv_int(x)`, `try_conv_float(x)`, `try_conv_bool(x)` convert or return `None`.
 
 ```fallen
 age =i conv_int(enter("Age: "))
 write(age)
+
+maybe =i try_conv_int("oops")
+write(maybe)  # None
 ```
 
-### 9.2 User-defined functions (Target / Intended)
+### amount(x)
 
-If you want user-defined functions, the typical syntax is:
+Returns length of a list or string.
 
 ```fallen
-func add(a, b) {
-    return a + b
+write(amount([1,2,3]))
+write(amount("abc"))
+```
+
+### del(list)
+
+Removes and returns the last element of a list.
+
+```fallen
+nums =l [1, 2, 3]
+write(del(nums))
+write(nums)
+```
+
+### File I/O
+
+- `save(path, text)` overwrite/create
+- `change(path, text)` append
+- `read(path)` read whole file
+
+Paths are resolved relative to the program’s folder.
+
+```fallen
+save("note.txt", "hi")
+change("note.txt", " there")
+write(read("note.txt"))
+```
+
+## Lists
+
+```fallen
+nums =l [10, 20, 30]
+```
+
+### Read an element
+
+Use `call <name>(<index>)`.
+
+```fallen
+write(call nums(0))
+call nums(1)  # statement shortcut: prints the value
+```
+
+### Set / add / remove
+
+```fallen
+set nums(1) to (999)
+add nums(42)
+insert(nums, 0, 5)
+remove nums(0)
+write(nums)
+```
+
+## Dicts
+
+```fallen
+d =d {"name": "Ali"}
+write(call d("name"))
+
+set d("score") to (100)
+remove d("name")
+write(d)
+```
+
+## match
+
+```fallen
+x =i 2
+match x {
+    1 { write("one") }
+    2 { write("two") }
+    else { write("other") }
 }
-
-x =i add(5, 7)
-write(x)
 ```
 
-If this feature is not implemented yet, you will need new AST nodes (commonly `FuncDef` and `Return`) and compiler/VM support.
+## Modules (import/export)
 
-## 10) Built-in functions (Target / Intended)
-
-These are the built-ins you have already chosen in the language design.
-
-### 10.1 `write(value)`
-
-Prints a value to the console.
+### import
 
 ```fallen
-write("Hello")
-write(123)
+import "some_module.fallen"
 ```
 
-### 10.2 `enter(prompt)`
+Notes:
 
-Shows a prompt, reads user input, returns a string.
+- A module is executed once per run (cached).
+- Circular imports are handled safely.
 
-```fallen
-name =s enter("Enter your name: ")
-write(name)
-```
+### Private names and export
 
-### 10.3 `conv_int(value)`
+Rules:
 
-Converts a string to an integer.
-
-```fallen
-t =s enter("Enter a number: ")
-n =i conv_int(t)
-write(n)
-```
-
-Runtime rule: if conversion fails, the VM should error:
-
-```text
-Runtime error: Cannot convert to int: "abc"
-```
-
-### 10.4 `conv_float(value)`
-
-Converts a string to a float.
-
-```fallen
-t =s enter("Enter a decimal: ")
-x =f conv_float(t)
-write(x)
-```
-
-Runtime rule: if conversion fails, the VM should error:
-
-```text
-Runtime error: Cannot convert to float: "abc"
-```
-
-## 11) Lists (Target / Intended)
-
-### 11.1 Create a list
-
-```fallen
-my_list [1, "d", 2.2]
-```
-
-### 11.2 Read items using call
-
-Index starts at 0.
-
-```fallen
-write(my_list(0))   # prints 1
-write(my_list(1))   # prints "d"
-write(my_list(2))   # prints 2.2
-```
-
-### 11.3 Print entire list
-
-```fallen
-write(my_list)
-```
-
-If you only want one output function in the language, standardize on `write()` and avoid adding a separate `print()`.
-
-### 11.4 Change an element (`set`)
+- Names starting with `_` are private by default.
+- If a module has no `export` statements: all non-underscore module globals are public.
+- If a module uses `export` at least once: only exported names are public.
 
 Syntax:
 
+```fallen
+export name
+```
+
+## Standard library (std/)
+
+These modules ship as Fallen source files:
+
+- `std/strings.fallen`: `concat(a,b)`, `repeat(s,n)`
+- `std/lists.fallen`: `amount_list(x)`, `peek_last(x)`
+- `std/files.fallen`: `read_text(path)`, `write_text(path,text)`, `append_text(path,text)`
+
+Example:
+
+```fallen
+import "std/files.fallen"
+save("std_test.txt", "hi")
+write(read_text("std_test.txt"))
+```
+
+## Debugging
+
+### Runtime errors (stack traces)
+
+Runtime errors include a stack trace:
+
 ```text
-set listname (index) to (value)
+Runtime error: ...
+  ip=0006
+  at func crash (file.fallen:3)
+  at func main (file.fallen:7)
+  at func <main> (file.fallen:10)
 ```
 
-Example:
-
-```fallen
-nums [10, 20, 30]
-set nums (0) to (2)     # nums becomes [2, 20, 30]
-```
-
-### 11.5 Add to end (append) (`add`)
-
-Syntax:
+Import failures are shown as:
 
 ```text
-add listname (value)
+Import error in "module.fallen":
+  Runtime error: ...
+  at func ...
 ```
 
-Example:
+### Trace mode (VM instruction tracing)
 
-```fallen
-nums [1, 2]
-add nums (99)           # nums becomes [1, 2, 99]
+Use exactly:
+
+- `trace on`
+- `trace off`
+
+When enabled, the VM prints each instruction as it executes:
+
+```text
+TRACE ip=0012 ('LOAD_CONST', 3) stack=2
 ```
-
-## 12) Errors and debugging
-
-### 12.1 Common runtime errors
-
-#### Undefined variable
-
-Cause: using a name that was never assigned.
-
-Example:
-
-```fallen
-write(mmgc)
-```
-
-Fix: assign it or quote it as a string:
-
-```fallen
-write("mmgc")
-```
-
-#### Bad conversion
-
-Cause: `conv_int("abc")`
-
-Fix: ensure numeric input, or validate before converting (if you later add validation helpers).
-
-### 12.2 Recommended debugging workflow
-
-Run:
-
-```bash
-python cli.py parse file.fallen
-```
-
-Confirm the AST matches what you think you wrote.
-
-Run:
-
-```bash
-python cli.py build file.fallen
-```
-
-Confirm constants and instruction order.
-
-Run:
-
-```bash
-python cli.py run file.fallen
-```
-
-If it fails, use the error message + AST output to locate the problem.
-
-## 13) Style guide (recommended)
-
-Use clear variable names:
-
-```fallen
-user_name =s enter("Name: ")
-```
-
-Use parentheses in complex boolean expressions:
-
-```fallen
-if (a == 1 or a == 2) and not banned {
-    write("ok")
-}
-```
-
-Prefer one output function (`write`) to keep the language simple.
-
-## 14) Examples (copy/paste)
-
-### 14.1 Echo input
-
-```fallen
-msg =s enter("Enter something: ")
-write(msg)
-```
-
-### 14.2 School check (your real example)
-
-```fallen
-value =s enter("what is the name of your school? ")
-if value == "mmgc" {
-    write("Falcon")
-} else {
-    write("Not mmgc")
-}
-```
-
-### 14.3 While loop counter
-
-```fallen
-i =i 0
-while i < 5 {
-    write(i)
-    i =i i + 1
-}
-```
-
-### 14.4 Conversions
-
-```fallen
-a =s enter("Enter whole number: ")
-b =i conv_int(a)
-write(b)
-
-x =s enter("Enter decimal: ")
-y =f conv_float(x)
-write(y)
-```
-
-### 14.5 Lists (design spec)
-
-```fallen
-items [1, "d", 2.2]
-write(items(0))
-set items (0) to (2)
-add items (99)
-write(items)
-```
-
-## 15) Compatibility notes / roadmap
-
-Confirmed by your current AST printer
-
-These are definitely present in your language pipeline:
-
-- Typed assignment structure (`VarAssign` with `name`, `var_type`, `value`)
-- Literals (`Literal`)
-- Variable reads (`Var`)
-- Binary expressions (`Binary`)
-- Calls (`Call`)
-- Blocks (`Block`)
-- `if` / optional `else` (`If`)
-- `while` (`While`)
-
-Spec-defined features to ensure are implemented
-
-These are required by your design and should be implemented if missing:
-
-- `enter("prompt")`
-- `conv_int(x)` and `conv_float(x)`
-- boolean operators: `and`, `or`, `not`
-- list creation, indexing via call, plus `set` and `add`

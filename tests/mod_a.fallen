@@ -1,0 +1,7 @@
+write("mod_a init")
+
+x =i 7
+
+func add(a =i, b =i) {
+    return a + b
+}

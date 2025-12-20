@@ -1,5 +1,6 @@
 class ASTNode:
-    pass
+    # Optional source line (1-based). Parser may set this.
+    line: int | None = None
 
 
 class Program(ASTNode):
@@ -31,6 +32,15 @@ class Binary(ASTNode):
         self.right = right
 
 
+class CompareChain(ASTNode):
+    def __init__(self, first, ops, rest):
+        # Represents: first (ops[0]) rest[0] (ops[1]) rest[1] ...
+        # first: expr, ops: list[str], rest: list[expr]
+        self.first = first
+        self.ops = ops
+        self.rest = rest
+
+
 class Unary(ASTNode):
     def __init__(self, op, expr):
         self.op = op
@@ -41,6 +51,12 @@ class Call(ASTNode):
     def __init__(self, name, args):
         self.name = name
         self.args = args
+
+
+class NamedArg(ASTNode):
+    def __init__(self, name, value_expr):
+        self.name = name
+        self.value_expr = value_expr
 
 
 class Block(ASTNode):
@@ -56,9 +72,10 @@ class If(ASTNode):
 
 
 class While(ASTNode):
-    def __init__(self, condition, body):
+    def __init__(self, condition, body, else_block=None):
         self.condition = condition
         self.body = body
+        self.else_block = else_block
 
 
 class Stop(ASTNode):
@@ -70,15 +87,32 @@ class Continue(ASTNode):
 
 
 class FuncDef(ASTNode):
-    def __init__(self, name, params, body):
+    def __init__(self, name, params, body, return_type=None):
         self.name = name
         self.params = params  # list of (param_name, param_type)
         self.body = body      # Block
+        self.return_type = return_type
 
 
 class Return(ASTNode):
     def __init__(self, expr):
         self.expr = expr
+
+
+class Import(ASTNode):
+    def __init__(self, path_literal, alias: str | None = None):
+        self.path_literal = path_literal
+        self.alias = alias
+
+
+class Export(ASTNode):
+    def __init__(self, name):
+        self.name = name
+
+
+class Trace(ASTNode):
+    def __init__(self, enabled: bool):
+        self.enabled = enabled
 
 
 class ListLiteral(ASTNode):
@@ -112,10 +146,11 @@ class RemoveListItem(ASTNode):
 
 
 class For(ASTNode):
-    def __init__(self, var_name, iterable_expr, body):
+    def __init__(self, var_name, iterable_expr, body, else_block=None):
         self.var_name = var_name
         self.iterable_expr = iterable_expr
         self.body = body
+        self.else_block = else_block
 
 
 class Match(ASTNode):

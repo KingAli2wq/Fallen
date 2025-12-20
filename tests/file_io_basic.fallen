@@ -1,4 +1,4 @@
 save("fallen_test_io_basic.txt", "hi")
-append("fallen_test_io_basic.txt", "\nthere")
-x =s load("fallen_test_io_basic.txt")
+change("fallen_test_io_basic.txt", "\nthere")
+x =s read("fallen_test_io_basic.txt")
 write(x)
