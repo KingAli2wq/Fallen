@@ -1,5 +1,0 @@
-a =i 2
-b =i 3
-c =i 4
-write(a < b < c)
-write(a < b > c)

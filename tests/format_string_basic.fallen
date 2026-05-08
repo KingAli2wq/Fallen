@@ -1,2 +1,0 @@
-name =s "Ali"
-write("Hello {name}")

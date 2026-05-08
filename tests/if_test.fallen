@@ -1,8 +1,0 @@
-score =i 10
-
-if score > 5 {
-  write("big")
-}
-else {
-  write("small")
-}

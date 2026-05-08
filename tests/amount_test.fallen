@@ -1,2 +1,0 @@
-write(amount([1, 2, 3]))
-write(amount("abc"))

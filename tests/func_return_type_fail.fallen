@@ -1,4 +1,0 @@
-func bad() =i {
-  return "x"
-}
-write(bad())

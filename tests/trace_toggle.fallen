@@ -1,4 +1,0 @@
-trace on
-x =i 1
-trace off
-write(x)

@@ -1,2 +1,0 @@
-x =i conv_int("abc")
-write(x)

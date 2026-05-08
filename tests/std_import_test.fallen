@@ -1,4 +1,0 @@
-import "std/files.fallen"
-
-save("std_test.txt", "hi")
-write(read_text("std_test.txt"))

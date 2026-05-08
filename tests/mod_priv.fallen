@@ -1,9 +1,0 @@
-x =i 1
-
-func add(a =i, b =i) {
-    return a + b
-}
-
-func _helper() {
-    return 999
-}

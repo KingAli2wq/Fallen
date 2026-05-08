@@ -1,3 +1,0 @@
-nums =l [10, 20, 30]
-remove nums(1)
-write(nums)

@@ -1,3 +1,0 @@
-nums =l [1, 2, 3]
-write(del(nums))
-write(nums)

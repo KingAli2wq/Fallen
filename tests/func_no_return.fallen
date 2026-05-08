@@ -1,7 +1,0 @@
-func hello() {
-  write("hi")
-}
-
-x =i 0
-hello()
-write(x)

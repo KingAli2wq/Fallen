@@ -1,3 +1,0 @@
-parts =l split("a,b,c", ",")
-write(parts)
-write(join(parts, "-"))

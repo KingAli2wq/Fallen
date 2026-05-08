@@ -1,4 +1,0 @@
-nums =l [1, 2, 3]
-for n in nums {
-  write(n)
-}

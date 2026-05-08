@@ -1,2 +1,0 @@
-name =s enter("Enter your name: ")
-write(name)

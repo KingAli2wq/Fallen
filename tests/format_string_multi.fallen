@@ -1,3 +1,0 @@
-score =i 10
-lives =i 3
-write("""Score: {score}\lineLives: {lives}""")

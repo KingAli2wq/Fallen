@@ -1,3 +1,0 @@
-import "mod_explicit.fallen"
-
-write(_helper())

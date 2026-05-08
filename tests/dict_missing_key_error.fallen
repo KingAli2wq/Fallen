@@ -1,2 +1,0 @@
-p =d { "hp": 1 }
-write(call p("missing"))

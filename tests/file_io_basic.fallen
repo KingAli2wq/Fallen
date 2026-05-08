@@ -1,4 +1,0 @@
-save("fallen_test_io_basic.txt", "hi")
-change("fallen_test_io_basic.txt", "\nthere")
-x =s read("fallen_test_io_basic.txt")
-write(x)

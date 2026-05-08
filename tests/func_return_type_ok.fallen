@@ -1,4 +1,0 @@
-func add(a =i, b =i) =i {
-  return a + b
-}
-write(add(1, 2))
