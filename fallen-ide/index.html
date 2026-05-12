@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' 'unsafe-inline' file:; style-src 'self' 'unsafe-inline' file:; worker-src blob:;">
+  <title>Fallen IDE</title>
+  <link rel="stylesheet" href="renderer/style.css">
+  <link rel="stylesheet" href="node_modules/xterm/css/xterm.css">
+</head>
+<body>
+
+<!-- Title bar -->
+<div id="titlebar">
+  <div id="titlebar-drag">
+    <span id="app-title">Fallen IDE</span>
+  </div>
+  <div id="titlebar-buttons">
+    <button id="btn-min" onclick="api.winMinimize()">&#8722;</button>
+    <button id="btn-max" onclick="api.winMaximize()">&#9744;</button>
+    <button id="btn-close" onclick="api.winClose()">&#10005;</button>
+  </div>
+</div>
+
+<!-- Menu bar -->
+<div id="menubar">
+  <button onclick="App.openFolder()">Open Folder</button>
+  <button onclick="App.newFile()">New File</button>
+  <button onclick="App.saveActive()">Save</button>
+  <button onclick="App.runActive()" title="Run in terminal (scripts, CLI)">&#9654; Run</button>
+  <button onclick="App.launchActive()" title="Launch as App — opens a window (games, GUI apps, Pygame, etc.)">&#9654;&#9654; Launch</button>
+  <button onclick="App.installPackage()" title="Install a package (npm / pip / cargo / go / gem)">&#128229; Install Pkg</button>
+  <button id="btn-wordwrap" onclick="App.toggleWordWrap()" title="Toggle Word Wrap">&#8617; Wrap</button>
+  <div class="menu-spacer"></div>
+  <button onclick="App.togglePanel('ai')">AI</button>
+  <button onclick="App.togglePanel('terminal')">Terminal</button>
+</div>
+
+<!-- Main layout -->
+<div id="workbench">
+
+  <!-- File tree sidebar -->
+  <div id="sidebar">
+    <div id="sidebar-tabs">
+      <button class="stab active" onclick="App.showView('files', this)" title="Explorer">&#128193;</button>
+      <button class="stab" onclick="App.showView('exts', this)" title="Extensions">&#129513;</button>
+    </div>
+    <div id="view-files">
+      <div id="sidebar-header">
+        <span id="folder-name">No folder open</span>
+        <button id="btn-new-file" title="New file" onclick="App.newFile()">+</button>
+      </div>
+      <div id="file-tree"></div>
+    </div>
+    <div id="view-exts" style="display:none">
+      <div id="ext-header">
+        <input id="ext-search" type="text" placeholder="Search extensions&#8230;" oninput="Extensions.search(this.value)" />
+      </div>
+      <div id="ext-list"></div>
+    </div>
+  </div>
+
+  <!-- Centre: editor tabs + editor + bottom panel -->
+  <div id="centre">
+    <div id="tabs-bar">
+      <div id="tabs-list"></div>
+    </div>
+    <div id="editor-container">
+      <div id="monaco-editor"></div>
+      <div id="editor-placeholder">
+        <div>
+          <p>Open a folder or file to start coding.</p>
+          <p style="color:#555;font-size:12px;">AI: <span id="ai-status">checking…</span></p>
+        </div>
+      </div>
+    </div>
+    <div id="resize-handle"></div>
+    <div id="bottom-panel">
+      <div id="panel-tabs">
+        <button class="panel-tab active" data-panel="terminal" onclick="App.switchPanel('terminal', this)">Terminal</button>
+        <button class="panel-tab" data-panel="output" onclick="App.switchPanel('output', this)">Output</button>
+      </div>
+      <div id="panel-terminal" class="panel-content active">
+        <div id="terminal-toolbar">
+          <div id="terminal-tabs"></div>
+          <button id="terminal-new" type="button" onclick="App.newTerminal()">+</button>
+        </div>
+        <div id="xterm-container"></div>
+      </div>
+      <div id="panel-output" class="panel-content">
+        <pre id="output-text"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI sidebar (right) -->
+  <div id="ai-panel" class="hidden">
+    <div id="ai-header">
+      <div id="ai-header-row1">
+        <span id="ai-title">Fallen AI <small>1.0 Super</small></span>
+        <span id="ai-connection-status" class="ai-connection checking">AI checking…</span>
+      </div>
+      <div id="ai-header-row2">
+        <div class="ai-mode-group" role="group" aria-label="AI mode">
+          <button type="button" class="ai-mode-btn active" data-ai-mode="ask" onclick="AI.setMode('ask')" title="Ask — quick Q&amp;A; can use web search">Ask</button>
+          <button type="button" class="ai-mode-btn" data-ai-mode="agent" onclick="AI.setMode('agent')" title="Agent — can edit files and run commands">Agent</button>
+          <button type="button" class="ai-mode-btn" data-ai-mode="plan" onclick="AI.setMode('plan')" title="Plan — produce a concise plan; may use web search">Plan</button>
+        </div>
+        <button class="ai-clear-btn" onclick="AI.clearCurrentChat()" title="Clear current chat history">Clear</button>
+      </div>
+    </div>
+    <div id="ai-context-meter">
+      <div class="context-meter-track"><div class="context-meter-fill" id="context-meter-fill"></div></div>
+      <span id="context-meter-label">0 / 20000 tokens</span>
+    </div>
+    <div id="ai-chats-bar"></div>
+    <div id="ai-messages"></div>
+    <div id="ai-input-row">
+      <textarea id="ai-input" placeholder="Ask AI… (Enter to send, Shift+Enter for newline)" rows="3"></textarea>
+      <div class="ai-btn-col">
+        <button id="ai-send" onclick="AI.send()">Send</button>
+        <button id="ai-stop" onclick="AI.stop()" style="display:none">Stop</button>
+      </div>
+    </div>
+    <div id="ai-actions">
+      <button onclick="AI.applyLastEdit()" id="btn-apply-edit" class="hidden">Apply Edit</button>
+      <button onclick="AI.explainError()" id="btn-explain-error" class="hidden">Fix Last Error</button>
+    </div>
+  </div>
+
+
+</div>
+
+<!-- Status bar -->
+<div id="statusbar">
+  <span id="status-lang"></span>
+  <span id="status-pos"></span>
+</div>
+
+<!-- Custom dialog overlay (Monaco blocks window.prompt/confirm/alert) -->
+<div id="dlg-overlay">
+  <div id="dlg-box">
+    <div id="dlg-msg"></div>
+    <input id="dlg-input" type="text" />
+    <div id="dlg-btns">
+      <button id="dlg-ok">OK</button>
+      <button id="dlg-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.nodeModulesPath = 'node_modules';
+</script>
+<script src="node_modules/xterm/lib/xterm.js"></script>
+<script src="node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+<script src="node_modules/monaco-editor/min/vs/loader.js"></script>
+<script>
+  require.config({ paths: { 'vs': 'node_modules/monaco-editor/min/vs' } });
+  require(['vs/editor/editor.main'], function () {
+    document.dispatchEvent(new Event('monaco-ready'));
+  });
+</script>
+<script src="renderer/app.js"></script>
+<script src="renderer/ai.js"></script>
+</body>
+</html>
