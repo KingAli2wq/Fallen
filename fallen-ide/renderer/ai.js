@@ -246,7 +246,12 @@ Rules:
       if (currentMode !== 'agent') continue;
 
       if (tool.type === 'EDIT') {
-        await api.writeFile(tool.path, tool.content);
+        const ok = await api.writeFile(tool.path, tool.content);
+        if (!ok) {
+          addSystemMessage(`Error: could not write "${tool.path}"`);
+          results.push(`[EDIT path="${tool.path}"]\nError: file write failed — check the path is valid.`);
+          continue;
+        }
         const tab = state.tabs.find(t => t.path === tool.path);
         if (tab) {
           const pos = state.editor?.getPosition();
@@ -255,6 +260,7 @@ Rules:
           if (state.activeTab === tool.path && pos) state.editor.setPosition(pos);
           App.renderTabs();
         }
+        if (state.rootPath) App.renderTree(state.rootPath, document.getElementById('file-tree'), 0);
         addSystemMessage(`Edited: ${tool.path}`);
         results.push(`[EDIT path="${tool.path}"]\nApplied successfully.`);
       } else if (tool.type === 'RUN') {
@@ -350,7 +356,7 @@ Rules:
     return Math.round(chars / 4);
   }
 
-  function renderRichText(content) {
+  function renderRichText(content, { isFinal = false } = {}) {
     const source = String(content ?? '').replace(/\r\n/g, '\n');
     const fenceRegex = /```([\w-]*)\n([\s\S]*?)```/g;
     let html = '';
@@ -362,9 +368,9 @@ Rules:
       lastIndex = match.index + match[0].length;
     }
     const remaining = source.slice(lastIndex);
-    // Detect an unclosed code fence (AI is still generating code)
     const partialIdx = remaining.indexOf('```');
-    if (partialIdx !== -1) {
+    // Only show spinner during live streaming — never on a completed response
+    if (partialIdx !== -1 && !isFinal) {
       html += renderInlineMarkup(remaining.slice(0, partialIdx));
       html += '<div class="ai-code-generating"><span class="ai-code-gen-spinner"></span> Generating code…<span class="ai-code-gen-hint">(click to expand when done)</span></div>';
     } else {
@@ -459,7 +465,7 @@ Rules:
         api.removeAiListeners(id);
         if (err) {
           if (stopRequested) {
-            msgEl.innerHTML = renderRichText(prepareForDisplay(fullResponse)) +
+            msgEl.innerHTML = renderRichText(prepareForDisplay(fullResponse), { isFinal: true }) +
               '<span style="color:#858585;font-style:italic"> [stopped]</span>';
             msgEl.dataset.raw = fullResponse;
             stopRequested = false;
@@ -471,7 +477,7 @@ Rules:
           return;
         }
         // Final render: strip tool markup so the display is clean
-        msgEl.innerHTML = renderRichText(prepareForDisplay(fullResponse));
+        msgEl.innerHTML = renderRichText(prepareForDisplay(fullResponse), { isFinal: true });
         msgEl.dataset.raw = fullResponse;
         resolve(fullResponse);
       });

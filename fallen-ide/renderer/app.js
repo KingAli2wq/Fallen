@@ -218,7 +218,7 @@ const App = {
         if (idx !== -1) out = out.slice(0, idx) + out.slice(idx + terminal.pendingEcho.length);
         terminal.pendingEcho = null;
       }
-      if (out) term.write(out);
+      if (out) term.write(out, () => term.scrollToBottom());
       AI.captureOutput(d);
     });
 
